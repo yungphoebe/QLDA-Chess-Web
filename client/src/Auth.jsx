@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Board from './Board.jsx'
 import { initialBoard } from './xiangqi.js'
+import { login, register } from './api.js'
 
 const HERO_BOARD = initialBoard()
 
@@ -8,6 +9,7 @@ export default function Auth({ onLogin }) {
   const [tab, setTab] = useState('login')
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
   const isLogin = tab === 'login'
 
   function switchTab(next) {
@@ -15,12 +17,45 @@ export default function Auth({ onLogin }) {
     setError('')
   }
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault()
     const form = Object.fromEntries(new FormData(e.target))
-    if (!isLogin && form.password !== form.confirm) return setError('Mật khẩu nhập lại không khớp')
-    // ponytail: chưa gọi API, bước 4 nối backend JWT + MongoDB
-    onLogin({ username: form.username.trim() })
+    const username = form.username?.trim()
+    const password = form.password
+    const email = form.email?.trim()
+
+    if (!isLogin && password !== form.confirm) {
+      return setError('Mật khẩu nhập lại không khớp')
+    }
+
+    setLoading(true)
+    setError('')
+
+    try {
+      if (isLogin) {
+        const data = await login(username, password)
+        localStorage.setItem('auth_user', JSON.stringify(data))
+        onLogin(data.user)
+      } else {
+        const data = await register(username, email, password)
+        localStorage.setItem('auth_user', JSON.stringify(data))
+        onLogin(data.user)
+      }
+    } catch (err) {
+      setError(err.message || 'Đã có lỗi xảy ra')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Chơi thử chế độ khách (Guest)
+  function playAsGuest() {
+    const guestUser = {
+      username: `Khách_${Math.floor(1000 + Math.random() * 9000)}`,
+      isGuest: true,
+    }
+    localStorage.setItem('auth_user', JSON.stringify({ user: guestUser, token: '' }))
+    onLogin(guestUser)
   }
 
   return (
@@ -76,7 +111,13 @@ export default function Auth({ onLogin }) {
 
         {error && <p className="error" role="alert">{error}</p>}
 
-        <button className="btn-hex primary btn-lg">{isLogin ? 'Đăng nhập' : 'Tạo tài khoản'}</button>
+        <button className="btn-hex primary btn-lg" disabled={loading}>
+          {loading ? 'Đang xử lý...' : isLogin ? 'Đăng nhập' : 'Tạo tài khoản'}
+        </button>
+
+        <button type="button" className="btn-hex guest-btn" onClick={playAsGuest}>
+          Chơi thử ngay (Khách)
+        </button>
 
         <p className="form-note">
           {isLogin ? 'Chưa có tài khoản? ' : 'Đã có tài khoản? '}
